@@ -7,12 +7,10 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 @Service
 public class OpenAiCompatibleService {
@@ -20,81 +18,98 @@ public class OpenAiCompatibleService {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
-    // INJECT THE BUILDER (Solves the Converter Deprecation warnings)
     public OpenAiCompatibleService(RestClient.Builder builder, ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(60000);
-        factory.setReadTimeout(60000);
+        factory.setConnectTimeout(90_000);
+        factory.setReadTimeout(120_000);
 
-        // Create a String converter that accepts EVERYTHING
-        StringHttpMessageConverter stringConverter = new StringHttpMessageConverter(StandardCharsets.UTF_8);
-        stringConverter.setSupportedMediaTypes(List.of(MediaType.ALL));
-
-        this.restClient = builder
-                .requestFactory(factory)
-                // --- SPRING 7.0 FIX: Use the new configuration API ---
-                .configureMessageConverters(configurer -> {
-                    // addCustomConverter automatically places this ahead of the default converters
-                    configurer.addCustomConverter(stringConverter);
-                })
-                .build();
+        this.restClient = builder.requestFactory(factory).build();
     }
 
-    public String generate(String providerName, String apiKey, String baseUrl, String model, String prompt, String exampleXml) {
+    public String generate(String providerName, String apiKey, String baseUrl,
+                           String model, String prompt, String exampleXml) {
         try {
-            ObjectNode rootNode = objectMapper.createObjectNode();
-            rootNode.put("model", model);
-            rootNode.put("temperature", 0.1);
-            String combinedSystemPrompt = """
-                You are a professional JasperReports 6.20 designer. Output ONLY raw JRXML code.
-                
-                CRITICAL SYNTAX RULES (DO NOT BREAK THESE):
-                1. Look at the DATA SCHEMA. For every <field>, you MUST use the exact 'class' provided in parentheses (e.g., java.lang.Double, java.lang.String). Do not assume BigDecimal.
-                2. NEVER declare standard parameters like 'REPORT_CONNECTION'.
-                3. NEVER use the 'style' attribute inside a <textField> or <staticText>.
-                4. NEVER use 'columnHeight' inside the root <jasperReport> tag.
-                5. NEVER use 'isSplitAllowed' or 'splitType' on <band> elements.
-                6. The root <jasperReport> MUST NOT have a 'uuid' attribute.
-                7. Ensure every <textFieldExpression> uses <![CDATA[ ... ]]>.
-                
-                DESIGN GUIDELINES:
-                1. Use <box> elements with pen lineStyle="Solid" for table cells to create borders.
-                2. Use <reportElement mode="Opaque" backcolor="#EEEEEE"> for headers.
-                
-                LEARNING SHOTS (Follow these perfect structures):
-                """ + (exampleXml.isEmpty() ? "No examples provided." : exampleXml);
+            ObjectNode root = objectMapper.createObjectNode();
+            root.put("model", model);
+            root.put("temperature", 0.1);
+            root.put("max_tokens", 8192); // 🔴 FIX: Cap tokens — prevents 402 on free tier
 
-            ArrayNode messages = rootNode.putArray("messages");
-            messages.addObject().put("role", "system").put("content", combinedSystemPrompt);
+            String systemPrompt = buildSystemPrompt(exampleXml);
+
+            ArrayNode messages = root.putArray("messages");
+            messages.addObject().put("role", "system").put("content", systemPrompt);
             messages.addObject().put("role", "user").put("content", prompt);
-            // --- OPTIMIZATION END ---
 
-            // CALL API
-            String response = restClient.post()
+            byte[] responseBytes = restClient.post()
                     .uri(baseUrl + "/chat/completions")
                     .header("Authorization", "Bearer " + apiKey)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.ALL) // Accept ANY format (Text, JSON, Binary)
-                    .body(objectMapper.writeValueAsString(rootNode))
+                    .accept(MediaType.ALL)
+                    .body(objectMapper.writeValueAsString(root))
                     .retrieve()
-                    .body(String.class); // Force read as String
+                    .body(byte[].class);
 
-            // Manual Parsing
-            JsonNode root = objectMapper.readTree(response);
+            String response = new String(responseBytes, StandardCharsets.UTF_8);
+            JsonNode responseJson = objectMapper.readTree(response);
 
-            String content = "";
-            if (root.has("choices") && !root.path("choices").isEmpty()) {
-                content = root.path("choices").get(0).path("message").path("content").asText();
-            } else {
+            if (!responseJson.has("choices") || responseJson.path("choices").isEmpty()) {
                 throw new RuntimeException("Unexpected response: " + response);
             }
+
+            String content = responseJson.path("choices").get(0)
+                    .path("message").path("content").asText();
 
             return JrxmlSanitizer.sanitize(content);
 
         } catch (Exception e) {
             throw new RuntimeException("[" + providerName + "] Call Failed: " + e.getMessage());
         }
+    }
+
+    private String buildSystemPrompt(String exampleXml) {
+        return """
+            You are a JasperReports 6.21 JRXML expert. Output ONLY raw JRXML. No markdown. No explanation.
+            
+            ╔══════════════════════════════════╗
+            ║   ABSOLUTE RULES — NEVER BREAK   ║
+            ╚══════════════════════════════════╝
+            
+            RULE 1 — FONT COLOR:
+              ✅ CORRECT: <reportElement forecolor="#FF0000" .../>
+              ❌ WRONG:   <font forecolor="#FF0000"/>
+              ❌ WRONG:   <font color="#FF0000"/>
+              The <font> tag ONLY accepts: fontName, size, isBold, isItalic, isUnderline, isPdfEmbedded, pdfFontName
+            
+            RULE 2 — BOX PLACEMENT:
+              ✅ CORRECT: <textField><reportElement.../><box>...</box><textFieldExpression.../></textField>
+              ❌ WRONG:   <band height="20"><box>...</box></band>
+              <box> is ONLY valid INSIDE <textField> or <staticText>. NEVER as a direct child of <band>.
+            
+            RULE 3 — BAND HEIGHT:
+              Every element's (y + height) MUST be <= the band's height attribute.
+              If band height="50", no element can have y=40 height=20 (that would be 60 > 50).
+            
+            RULE 4 — ROOT ELEMENT:
+              ✅ CORRECT: <jasperReport name="Report" ...>
+              ❌ WRONG:   <jasperReport uuid="abc-123" ...>
+              NEVER include uuid attribute on root. ALWAYS include name attribute.
+            
+                RULE 5 — DEPRECATED ATTRIBUTES:
+                  ❌ NEVER use: isSplitAllowed on bands.
+                  ❌ NEVER use: splitType on bands.
+                  ❌ NEVER use: isStretchWithOverflow — use textAdjust="StretchHeight" instead
+                  ❌ NEVER use: style="" on textField or staticText
+            RULE 6 — EXPRESSIONS:
+              ✅ CORRECT: <textFieldExpression><![CDATA[$F{fieldName}]]></textFieldExpression>
+              Always wrap expressions in CDATA blocks.
+            
+            DESIGN STANDARDS:
+            - Use <box><pen lineStyle="Solid" lineWidth="0.5"/></box> inside cells for borders.
+            - Use <reportElement mode="Opaque" backcolor="#4A90D9" forecolor="#FFFFFF"/> for headers.
+            - Standard page: width="595" height="842" (A4). Column width = pageWidth - margins.
+            
+            """ + (exampleXml.isBlank() ? "No examples loaded." : "REFERENCE EXAMPLES:\n" + exampleXml);
     }
 }
