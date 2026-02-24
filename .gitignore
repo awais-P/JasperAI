@@ -1,6 +1,6 @@
-target/
-*.class
-.idea/
-.vscode/
-*.iml
-src/main/resources/application.properties
+JasperAI-Backend/target/
+JasperAI-Backend/*.class
+JasperAI-Backend/.idea/
+JasperAI-Backend/.vscode/
+JasperAI-Backend/*.iml
+JasperAI-Backend/src/main/resources/application.properties
