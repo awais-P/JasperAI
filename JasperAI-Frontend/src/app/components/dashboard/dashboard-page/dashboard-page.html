@@ -1,5 +1,4 @@
 <div class="dashboard">
-  <!-- Dashboard Header -->
   <header class="dashboard-header">
     <div class="header-content">
       <div class="header-title">
@@ -7,13 +6,13 @@
         <p>Create professional Jasper Reports with AI-powered automation</p>
       </div>
       <div class="header-actions">
-        <button class="btn btn-outline">
+        <button class="btn btn-outline" (click)="clearPrompt()">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
           New Report
         </button>
-        <button class="btn btn-primary">
+        <button class="btn btn-primary" (click)="downloadPdf()" [disabled]="!rawPdfBlob">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
           </svg>
@@ -23,12 +22,9 @@
     </div>
   </header>
 
-  <!-- Main Content -->
   <main class="dashboard-main">
-    <!-- Generator Section -->
     <section class="generator-section">
       <div class="generator-grid">
-        <!-- Input Panel -->
         <div class="panel input-panel">
           <div class="panel-header">
             <div class="panel-title">
@@ -36,7 +32,7 @@
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>
-              <span>Input Prompt</span>
+              <span>Input Details</span>
             </div>
             <button class="btn-icon" (click)="clearPrompt()" title="Clear">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -45,6 +41,12 @@
             </button>
           </div>
           <div class="panel-body">
+            
+            <div class="error-banner" *ngIf="errorMessage" style="color: #c62828; background-color: #ffebee; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem; border: 1px solid #ffcdd2;">
+              {{ errorMessage }}
+            </div>
+
+            <label class="option-label" style="display: block; margin-bottom: 8px;">Report Prompt</label>
             <textarea 
               class="prompt-input"
               [(ngModel)]="promptText"
@@ -54,7 +56,16 @@ Example prompts:
 • Generate a monthly sales report with charts
 • Create an inventory tracking template
 • Build a financial summary with metrics"
-              rows="12"
+              rows="6"
+            ></textarea>
+
+            <label class="option-label" style="display: block; margin-top: 15px; margin-bottom: 8px;">JSON Data (Schema & Values)</label>
+            <textarea 
+              class="prompt-input"
+              [(ngModel)]="jsonData"
+              placeholder="Paste your JSON array here..."
+              rows="8"
+              style="font-family: 'Monaco', 'Menlo', monospace; background-color: #1e1e1e; color: #d4d4d4;"
             ></textarea>
             
             <div class="input-options">
@@ -69,8 +80,8 @@ Example prompts:
               </div>
               <div class="option-group">
                 <label class="option-label">Output Format</label>
-                <select class="option-select">
-                  <option>PDF</option>
+                <select class="option-select" disabled>
+                  <option>PDF (Active)</option>
                   <option>Excel</option>
                   <option>HTML</option>
                   <option>JRXML</option>
@@ -96,7 +107,6 @@ Example prompts:
           </div>
         </div>
 
-        <!-- Output Panel -->
         <div class="panel output-panel">
           <div class="panel-header">
             <div class="panel-title">
@@ -110,37 +120,41 @@ Example prompts:
               <span>Output Preview</span>
             </div>
             <div class="panel-actions">
-              <button class="btn-icon" title="Copy">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                </svg>
-              </button>
-              <button class="btn-icon" title="Download">
+              <button class="btn-icon" title="Download" (click)="downloadPdf()" [disabled]="!rawPdfBlob">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
                 </svg>
               </button>
             </div>
           </div>
-          <div class="panel-body">
-            <div class="output-display" [class.has-content]="outputResult">
-              <div *ngIf="!outputResult" class="output-placeholder">
+          <div class="panel-body" style="padding: 0; display: flex; flex-direction: column;">
+            <div class="output-display" [class.has-content]="pdfUrl" style="border: none; flex: 1; margin: 0; min-height: 550px;">
+              
+              <div *ngIf="!pdfUrl" class="output-placeholder" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
                 <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                   <polyline points="14 2 14 8 20 8"/>
                 </svg>
                 <h3>No Output Yet</h3>
-                <p>Enter your prompt and click "Generate Report" to see the preview here</p>
+                <p>Enter your prompt and data, then click Generate to view the PDF.</p>
               </div>
-              <pre *ngIf="outputResult" class="output-content">{{ outputResult }}</pre>
+
+              <object 
+                *ngIf="pdfUrl" 
+                [data]="pdfUrl" 
+                type="application/pdf" 
+                width="100%" 
+                height="100%"
+                style="min-height: 550px; border: none; flex: 1;">
+                <p>Your browser does not support PDFs. <a href="#" (click)="downloadPdf(); $event.preventDefault()">Download the PDF</a>.</p>
+              </object>
+
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Previous Templates Section -->
     <section class="templates-section">
       <div class="section-header">
         <h2>

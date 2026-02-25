@@ -6,6 +6,7 @@ import { SharedRoutingModule } from './shared-routing-module';
 import { Navbar } from './components/navbar/navbar';
 import { Footer } from './components/footer/footer';
 import { About } from './components/about/about';
+import { ToastComponent } from './components/toast/toast';
 import { HttpClientModule } from '@angular/common/http';
 
 
@@ -13,7 +14,8 @@ import { HttpClientModule } from '@angular/common/http';
   declarations: [
     Navbar,
     Footer,
-    About
+    About,
+    ToastComponent
   ],
   imports: [
     CommonModule,
@@ -23,7 +25,8 @@ import { HttpClientModule } from '@angular/common/http';
   ],
   exports: [
     Navbar,
-    Footer
+    Footer,
+    ToastComponent
   ]
 })
 export class SharedModule { }

@@ -3,15 +3,19 @@ package com.awais.jasperAi.controllers;
 import com.awais.jasperAi.entities.User;
 import com.awais.jasperAi.repositories.UserRepository;
 import com.awais.jasperAi.security.JwtService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -35,42 +39,83 @@ public class AuthController {
 
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@RequestBody Map<String, String> payload) {
-        String email = payload.get("email");
-        String password = payload.get("password");
-        String fullName = payload.get("fullName");
+        try {
+            String email = payload.get("email");
+            String password = payload.get("password");
+            String fullName = payload.get("fullName");
 
-        if (userRepository.existsByEmail(email)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Email already in use"));
+            // Check if email is already taken
+            if (userRepository.existsByEmail(email)) {
+                // Return 409 Conflict with JSON error
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("error", "Email is already in use. Please log in."));
+            }
+
+            // Hash password and save
+            User newUser = new User(email, passwordEncoder.encode(password), fullName);
+            userRepository.save(newUser);
+
+            // Return 201 Created
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(Map.of(
+                            "message", "User registered successfully",
+                            "plan", newUser.getPlanType()
+                    ));
+
+        } catch (Exception e) {
+            // Generic 500 fallback
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "An error occurred while creating the account."));
         }
-
-        // HASH THE PASSWORD BEFORE SAVING
-        User newUser = new User(email, passwordEncoder.encode(password), fullName);
-        userRepository.save(newUser);
-
-        return ResponseEntity.ok(Map.of("message", "User registered successfully", "plan", newUser.getPlanType()));
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String, String> payload) {
-        String email = payload.get("email");
-        String password = payload.get("password");
+        try {
+            String email = payload.get("email");
+            String password = payload.get("password");
 
-        // 1. Authenticate credentials (this checks the hashed password automatically)
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(email, password)
-        );
+            // 1. Authenticate credentials
+            // If the password is wrong or email doesn't exist, this THROWS an exception.
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(email, password)
+            );
 
-        // 2. Load user and generate token
-        UserDetails userDetails = userDetailsService.loadUserByUsername(email);
-        User dbUser = userRepository.findByEmail(email).get();
-        String jwtToken = jwtService.generateToken(userDetails);
+            // 2. If we reach here, credentials are correct. Load user and generate token.
+            UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+            Optional<User> dbUserOptional = userRepository.findByEmail(email);
 
-        // 3. Return the token and user info
-        return ResponseEntity.ok(Map.of(
-                "token", jwtToken,
-                "email", dbUser.getEmail(),
-                "fullName", dbUser.getFullName(),
-                "planType", dbUser.getPlanType()
-        ));
+            if (dbUserOptional.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "User account not found."));
+            }
+
+            User dbUser = dbUserOptional.get();
+            String jwtToken = jwtService.generateToken(userDetails);
+
+            // 3. Return 200 OK with the token and user info
+            return ResponseEntity.ok(Map.of(
+                    "token", jwtToken,
+                    "email", dbUser.getEmail(),
+                    "fullName", dbUser.getFullName(),
+                    "planType", dbUser.getPlanType()
+            ));
+
+        } catch (BadCredentialsException e) {
+            // CATCH WRONG PASSWORD OR EMAIL
+            // Return 401 Unauthorized with the exact JSON structure Angular expects
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Invalid email or password. Please try again."));
+
+        } catch (AuthenticationException e) {
+            // Catch any other Spring Security auth issues (like locked accounts)
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Authentication failed."));
+
+        } catch (Exception e) {
+            // Generic 500 fallback
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "An unexpected server error occurred."));
+        }
     }
 }
