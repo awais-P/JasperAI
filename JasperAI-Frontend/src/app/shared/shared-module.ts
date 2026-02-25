@@ -6,6 +6,7 @@ import { SharedRoutingModule } from './shared-routing-module';
 import { Navbar } from './components/navbar/navbar';
 import { Footer } from './components/footer/footer';
 import { About } from './components/about/about';
+import { HttpClientModule } from '@angular/common/http';
 
 
 @NgModule({
@@ -17,7 +18,8 @@ import { About } from './components/about/about';
   imports: [
     CommonModule,
     RouterModule,
-    SharedRoutingModule
+    SharedRoutingModule,
+    HttpClientModule
   ],
   exports: [
     Navbar,
