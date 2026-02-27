@@ -4,7 +4,6 @@ import com.awais.jasperAi.security.CustomUserDetailsService;
 import com.awais.jasperAi.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -34,22 +33,7 @@ public class SecurityConfig {
         this.userDetailsService = userDetailsService;
     }
 
-    // Dedicated security filter chain for H2 Console - runs first (Order 1)
     @Bean
-    @Order(1)
-    public SecurityFilterChain h2ConsoleSecurityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .securityMatcher("/h2-console/**")
-                .csrf(AbstractHttpConfigurer::disable)
-                .headers(headers -> headers.frameOptions(frame -> frame.disable()))
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
-
-        return http.build();
-    }
-
-    // Main security filter chain for API - runs second (Order 2)
-    @Bean
-    @Order(2)
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(request -> {

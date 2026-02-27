@@ -11,10 +11,14 @@ public class ReportTemplate {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(columnDefinition = "TEXT", unique = true) // The User's Prompt (e.g., "Green Invoice")
+    // Changed to CLOB for Oracle compatibility
+    @Lob
+    @Column(unique = true)
     private String prompt;
 
-    @Column(columnDefinition = "TEXT") // The AI generated JRXML
+    // Changed to CLOB to hold massive XML files
+    @Lob
+    @Column(name = "jrxml_code")
     private String jrxmlCode;
 
     private LocalDateTime createdAt;
@@ -32,5 +36,7 @@ public class ReportTemplate {
     public boolean isExample() { return isExample; }
     public void setExample(boolean example) { isExample = example; }
     public String getJrxmlCode() { return jrxmlCode; }
+    public void setJrxmlCode(String jrxmlCode) { this.jrxmlCode = jrxmlCode; }
     public String getPrompt() { return prompt; }
+    public void setPrompt(String prompt) { this.prompt = prompt; }
 }

@@ -25,6 +25,83 @@
     </div>
   </section>
 
+  <section class="video-section">
+    <div class="video-header">
+      <h2>See JasperAI in Action</h2>
+      <p>Watch how our platform transforms your report generation workflow</p>
+    </div>
+    <div class="video-container">
+      <div class="main-media">
+        <div class="media-wrapper">
+          @if (mediaItems[currentIndex].type === 'video') {
+            <video 
+              [src]="mediaItems[currentIndex].src" 
+              [poster]="mediaItems[currentIndex].poster"
+              controls
+              class="main-video">
+            </video>
+          } @else {
+            <img 
+              [src]="mediaItems[currentIndex].src" 
+              [alt]="mediaItems[currentIndex].title"
+              class="main-image">
+          }
+        </div>
+        <div class="media-info">
+          <h3>{{ mediaItems[currentIndex].title }}</h3>
+          <p>{{ mediaItems[currentIndex].description }}</p>
+        </div>
+        <div class="media-navigation">
+          <button class="nav-btn prev" (click)="prevMedia()" [disabled]="currentIndex === 0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+          </button>
+          <div class="media-counter">{{ currentIndex + 1 }} / {{ mediaItems.length }}</div>
+          <button class="nav-btn next" (click)="nextMedia()" [disabled]="currentIndex === mediaItems.length - 1">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="preview-sidebar">
+        <div class="preview-header">
+          <span>Up Next</span>
+        </div>
+        <div class="preview-list">
+          @for (item of mediaItems; track item.id; let i = $index) {
+            <div 
+              class="preview-item" 
+              [class.active]="i === currentIndex"
+              (click)="goToMedia(i)">
+              <div class="preview-thumbnail">
+                <img [src]="item.thumbnail" [alt]="item.title">
+                @if (item.type === 'video') {
+                  <div class="play-indicator">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                  </div>
+                }
+              </div>
+              <div class="preview-info">
+                <span class="preview-title">{{ item.title }}</span>
+                <span class="preview-duration">{{ item.duration }}</span>
+              </div>
+            </div>
+          }
+        </div>
+        <button class="btn btn-outline view-all-btn" (click)="nextMedia()" [disabled]="currentIndex === mediaItems.length - 1">
+          Next Video
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
   <section class="features">
     <div class="features-header">
       <h2>Why Choose JasperAI?</h2>
